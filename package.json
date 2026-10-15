@@ -1,0 +1,39 @@
+{
+  "name": "attendance-hr-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Attendance marking app for employees with an HR dashboard for access, policies and approvals.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,green \"npm run dev -w @app/api\" \"npm run dev -w @app/web\"",
+    "build": "npm run build -w @app/api && npm run build -w @app/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "db:local": "node scripts/local-db.mjs",
+    "db:migrate": "npm run db:migrate -w @app/api",
+    "db:deploy": "npm run db:deploy -w @app/api",
+    "db:seed": "npm run db:seed -w @app/api",
+    "db:studio": "npm run db:studio -w @app/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "concurrently": "9.2.4",
+    "embedded-postgres": "17.10.0-beta.17",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.12.0",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0"
+  }
+}

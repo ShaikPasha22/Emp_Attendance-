@@ -1,0 +1,518 @@
+// Attendance & HR Portal — database schema
+// Dates (`@db.Date`) are calendar days in the employee's location timezone, stored as UTC midnight.
+// Timestamps are always UTC.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------- Company
+
+/// Singleton row holding company-wide settings.
+model Company {
+  id                     String   @id @default("company")
+  name                   String
+  timezone               String   @default("Asia/Kolkata")
+  /// SecuritySettings (login & account restrictions)
+  security               Json
+  /// AttendanceRestrictions (company default)
+  attendanceRestrictions Json
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------- Org structure
+
+model BusinessUnit {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  code        String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  departments Department[]
+  users       User[]
+}
+
+model Department {
+  id             String        @id @default(cuid())
+  name           String        @unique
+  businessUnitId String?
+  businessUnit   BusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  users          User[]
+}
+
+model Designation {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+}
+
+model Grade {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  rank      Int?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+}
+
+model Location {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  address      String?
+  latitude     Float?
+  longitude    Float?
+  radiusMeters Int      @default(200)
+  timezone     String   @default("Asia/Kolkata")
+  /// Office network IPs / CIDRs used by the IP restriction
+  allowedIps   String[] @default([])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  users        User[]
+}
+
+// ---------------------------------------------------------------- Access
+
+enum UserStatus {
+  INVITED
+  PENDING
+  ACTIVE
+  SUSPENDED
+  EXITED
+}
+
+enum EmployeeType {
+  PERMANENT
+  CONTRACT
+  INTERN
+}
+
+enum ProfileScope {
+  SELF
+  ASSIGNED
+  COMPANY
+}
+
+model PermissionProfile {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  permissions String[]
+  scope       ProfileScope @default(SELF)
+  isSystem    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  users       User[]
+}
+
+model User {
+  id                     String       @id @default(cuid())
+  employeeCode           String       @unique
+  firstName              String
+  lastName               String
+  email                  String       @unique
+  phone                  String?
+  passwordHash           String?
+  status                 UserStatus   @default(INVITED)
+  employeeType           EmployeeType @default(PERMANENT)
+  joiningDate            DateTime?    @db.Date
+  businessUnitId         String?
+  departmentId           String?
+  designationId          String?
+  gradeId                String?
+  locationId             String?
+  /// Direct shift assignment (overrides applicability rules)
+  shiftId                String?
+  managerId              String?
+  profileId              String
+  /// HRBP data scope (used when profile scope = ASSIGNED)
+  hrScopeBusinessUnitIds String[]     @default([])
+  hrScopeLocationIds     String[]     @default([])
+  /// AttendanceRestrictionsPatch — individual override set by HR
+  restrictionOverride    Json?
+  restrictionOverrideReason String?
+  lastLoginAt            DateTime?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  businessUnit BusinessUnit?     @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  department   Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation  Designation?      @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  grade        Grade?            @relation(fields: [gradeId], references: [id], onDelete: SetNull)
+  location     Location?         @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shift        Shift?            @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  manager      User?             @relation("Reports", fields: [managerId], references: [id], onDelete: SetNull)
+  reports      User[]            @relation("Reports")
+  profile      PermissionProfile @relation(fields: [profileId], references: [id])
+
+  devices       Device[]
+  sessions      Session[]
+  tokens        UserToken[]
+  attendance    AttendanceRecord[] @relation("AttendanceOwner")
+  requests      Request[]
+  approvals     Approval[]
+  notifications Notification[]
+
+  @@index([status])
+  @@index([managerId])
+  @@index([departmentId])
+  @@index([locationId])
+}
+
+model Device {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceId   String
+  label      String?
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+}
+
+/// One row per login. The refresh token rotates in place; the previous hash is kept to detect reuse.
+model Session {
+  id                String    @id @default(cuid())
+  userId            String
+  tokenHash         String    @unique
+  previousTokenHash String?   @unique
+  rotatedAt         DateTime?
+  userAgent         String?
+  ip            String?
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedReason String?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String?
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
+enum TokenType {
+  INVITE
+  PASSWORD_RESET
+}
+
+model UserToken {
+  id        String    @id @default(cuid())
+  userId    String
+  type      TokenType
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+// ---------------------------------------------------------------- Policies
+
+model Shift {
+  id                   String   @id @default(cuid())
+  name                 String   @unique
+  startTime            String
+  endTime              String
+  graceMinutes         Int      @default(15)
+  earlyOutGraceMinutes Int      @default(0)
+  breakMinutes         Int      @default(60)
+  appliesTo            Json
+  priority             Int      @default(0)
+  isDefault            Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  users                User[]
+}
+
+model AttendancePolicy {
+  id                         String   @id @default(cuid())
+  name                       String   @unique
+  description                String?
+  fullDayMinutes             Int      @default(480)
+  halfDayMinutes             Int      @default(270)
+  absentBelowMinutes         Int      @default(120)
+  /// ISO weekdays (1 = Monday … 7 = Sunday)
+  weeklyOffs                 Int[]    @default([6, 7])
+  regularizationWindowDays   Int      @default(30)
+  maxRegularizationsPerMonth Int      @default(5)
+  missedPunchCloseHours      Int      @default(4)
+  appliesTo                  Json
+  priority                   Int      @default(0)
+  isDefault                  Boolean  @default(false)
+  isActive                   Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model RestrictionPolicy {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  /// AttendanceRestrictionsPatch
+  settings    Json
+  appliesTo   Json
+  priority    Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------- Attendance
+
+enum AttendanceStatus {
+  P
+  L
+  HD
+  EO
+  A
+  LV
+  WFH
+  OD
+  WO
+  H
+  MP
+  FL
+}
+
+enum ReviewStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PunchSource {
+  APP
+  REGULARIZED
+  HR_OVERRIDE
+  SYSTEM
+}
+
+model AttendanceRecord {
+  id               String            @id @default(cuid())
+  userId           String
+  date             DateTime          @db.Date
+  clockIn          DateTime?
+  clockOut         DateTime?
+  inLat            Float?
+  inLng            Float?
+  inAccuracy       Float?
+  inDistanceMeters Float?
+  inIp             String?
+  inDeviceId       String?
+  outLat           Float?
+  outLng           Float?
+  outAccuracy      Float?
+  outDistanceMeters Float?
+  outIp            String?
+  outDeviceId      String?
+  workMinutes      Int?
+  status           AttendanceStatus?
+  flags            String[]          @default([])
+  lateMinutes      Int               @default(0)
+  reviewStatus     ReviewStatus      @default(NONE)
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewComment    String?
+  statusOverride   AttendanceStatus?
+  overrideReason   String?
+  overriddenById   String?
+  source           PunchSource       @default(APP)
+  /// Shift used for computation: { name, startTime, endTime, graceMinutes, earlyOutGraceMinutes }
+  shiftSnapshot    Json?
+  /// true once the day is finalised by the nightly job
+  finalized        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  user             User              @relation("AttendanceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  punches          AttendancePunch[]
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([reviewStatus])
+}
+
+enum PunchType {
+  IN
+  OUT
+}
+
+/// Every individual clock-in / clock-out event with its evidence (the day record keeps first-in / last-out).
+model AttendancePunch {
+  id             String           @id @default(cuid())
+  recordId       String
+  userId         String
+  type           PunchType
+  at             DateTime
+  latitude       Float?
+  longitude      Float?
+  accuracy       Float?
+  distanceMeters Float?
+  ip             String?
+  deviceId       String?
+  userAgent      String?
+  flags          String[]         @default([])
+  /// Human-readable place (office name inside the geo-fence, otherwise reverse-geocoded address)
+  address        String?
+  /// OFFICE | GEOCODER | NONE — where `address` came from
+  addressSource  String?
+  /// State / region and country (from reverse geocoding) for the live map's state & country views
+  state          String?
+  country        String?
+  createdAt      DateTime         @default(now())
+  record         AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([recordId])
+  @@index([userId, at])
+  @@index([at])
+}
+
+/// Reverse-geocoding cache keyed by coordinates rounded to ~11 m, so repeat spots cost no lookup.
+model GeocodeCache {
+  key       String   @id
+  address   String
+  state     String?
+  country   String?
+  provider  String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------- Requests & workflow
+
+enum RequestType {
+  REGULARIZATION
+  WFH
+  ON_DUTY
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+model Request {
+  id           String        @id @default(cuid())
+  userId       String
+  type         RequestType
+  status       RequestStatus @default(PENDING)
+  startDate    DateTime      @db.Date
+  endDate      DateTime      @db.Date
+  reason       String
+  payload      Json
+  /// Snapshot of workflow levels at submission: [{ approverType }]
+  levels       Json
+  currentLevel Int           @default(0)
+  decidedAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  approvals    Approval[]
+
+  @@index([userId, status])
+  @@index([status, type])
+  @@index([startDate])
+}
+
+model Approval {
+  id         String           @id @default(cuid())
+  requestId  String
+  level      Int
+  approverId String
+  decision   ApprovalDecision
+  comment    String?
+  createdAt  DateTime         @default(now())
+  request    Request          @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver   User             @relation(fields: [approverId], references: [id])
+
+  @@index([requestId])
+}
+
+model WorkflowDefinition {
+  id             String      @id @default(cuid())
+  requestType    RequestType @unique
+  /// [{ approverType: "REPORTING_MANAGER" | "HR" }]
+  levels         Json
+  escalationDays Int?
+  updatedAt      DateTime    @updatedAt
+}
+
+// ---------------------------------------------------------------- System
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorName  String?
+  action     String
+  entityType String
+  entityId   String?
+  summary    String?
+  before     Json?
+  after      Json?
+  ip         String?
+  requestId  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([actorId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model JobRun {
+  id         String    @id @default(cuid())
+  name       String
+  status     String
+  detail     Json?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([name, startedAt])
+}

@@ -1,0 +1,168 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    min-height: 100dvh;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-600;
+  }
+  input,
+  select,
+  textarea {
+    /* 16px prevents iOS zoom-on-focus */
+    font-size: 16px;
+  }
+  @media (min-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 14px;
+    }
+  }
+}
+
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-slide-up {
+  animation: slide-up 0.22s ease-out;
+}
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+.animate-pop-in {
+  animation: pop-in 0.15s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-up,
+  .animate-fade-in,
+  .animate-pop-in {
+    animation: none;
+  }
+}
+
+/* ---------- Live map pins (Leaflet divIcons) ---------- */
+.lm-pin {
+  position: absolute;
+  transform: translate(-7px, -7px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+.lm-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  flex-shrink: 0;
+}
+.lm-working .lm-dot {
+  background: #059669;
+}
+.lm-out .lm-dot {
+  background: #94a3b8;
+}
+.lm-outside .lm-dot {
+  box-shadow:
+    0 0 0 3px #dc2626,
+    0 1px 3px rgb(0 0 0 / 0.35);
+}
+.lm-label {
+  font: 600 11px/1 system-ui, sans-serif;
+  color: #0f172a;
+  background: rgb(255 255 255 / 0.92);
+  border-radius: 6px;
+  padding: 3px 6px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+}
+.lm-out .lm-label {
+  color: #64748b;
+}
+.lm-cluster {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #475569;
+  color: #fff;
+  font: 700 13px/1 system-ui, sans-serif;
+  border: 3px solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+  cursor: pointer;
+}
+.lm-cluster-working {
+  background: #059669;
+}
+@keyframes lm-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(5 150 105 / 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 18px rgb(5 150 105 / 0);
+  }
+}
+.lm-pulse .lm-dot,
+.lm-cluster.lm-pulse {
+  animation: lm-pulse 1.2s ease-out 4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-pulse .lm-dot,
+  .lm-cluster.lm-pulse {
+    animation: none;
+  }
+}
