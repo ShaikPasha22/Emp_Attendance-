@@ -1,0 +1,19 @@
+// Cloudflare Workers deployment for the web app: static build + /api proxy to Render.
+// Deployed by Cloudflare Workers Builds (root directory: apps/web) with `npx wrangler deploy`.
+{
+  // Must match the Worker name in the Cloudflare dashboard.
+  "name": "finepumps-attendance",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    // Client-side routes (/admin, /requests, ...) fall back to index.html.
+    "not_found_handling": "single-page-application",
+    // Only /api/* runs the Worker; everything else is served straight from the CDN.
+    "run_worker_first": ["/api/*"],
+  },
+  "vars": {
+    "API_ORIGIN": "https://attendance-api-mb8q.onrender.com",
+  },
+  "observability": { "enabled": true },
+}

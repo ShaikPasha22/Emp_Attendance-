@@ -182,7 +182,7 @@ Attendance_App/
 │   │       ├── jobs/      # job handlers (triggered by GitHub Actions)
 │   │       └── middleware/
 │   └── web/            # One PWA: employee experience (/) + dashboard (/admin)
-│       ├── functions/  # Cloudflare Pages Function: /api/* proxy to Render
+│       ├── worker/     # Cloudflare Worker: /api/* proxy to Render (wrangler.jsonc)
 │       └── src/
 │           ├── components/  # Lightweight UI kit (buttons, sheets, tables…)
 │           ├── employee/    # Mobile-first employee screens
