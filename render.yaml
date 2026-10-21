@@ -1,0 +1,51 @@
+# Render Blueprint for the API (free web service). Render reads this on "New > Blueprint".
+# Secrets marked `sync: false` are entered once in the Render dashboard, never committed.
+services:
+  - type: web
+    name: attendance-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    # NODE_ENV=production would skip devDependencies (tsup, typescript), so include them for the build.
+    buildCommand: npm ci --include=dev && npm run build -w @app/api
+    # Applies pending Prisma migrations, then starts the server.
+    startCommand: npm run start:prod -w @app/api
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Neon: pooled string (host has "-pooler", append &pgbouncer=true) and direct string for migrations.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      # Public URL of the web app on Cloudflare Pages, e.g. https://attendance-xyz.pages.dev
+      - key: APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # Shared with GitHub Actions (JOB_SECRET) and Cloudflare Pages (PROXY_SECRET), so set them by hand.
+      - key: JOB_SECRET
+        sync: false
+      - key: PROXY_SECRET
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: console
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: GEOCODER
+        value: nominatim
+      - key: GEOCODER_CONTACT_EMAIL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
